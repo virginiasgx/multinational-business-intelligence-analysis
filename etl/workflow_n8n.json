@@ -1,0 +1,433 @@
+{
+  "name": "Caso práctico final",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -592,
+        -64
+      ],
+      "id": "f2b850be-2a54-4230-807e-82e9d71de3fa",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://www.usitc.gov/data/gravity/mreid/mreid_public_release_1.0.csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -368,
+        -64
+      ],
+      "id": "33b6b628-3420-4dec-842f-073cab3e7d61",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        -144,
+        -64
+      ],
+      "id": "63b5810b-93f7-4890-837b-24a3e909e780",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "batchSize": 8000,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        48,
+        -64
+      ],
+      "id": "4e9c0016-3acd-42de-bd01-0e65c3ed6efd",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        320,
+        -192
+      ],
+      "id": "276c401e-5eac-4051-b53f-e28b1cfe7fd4",
+      "name": "Wait",
+      "webhookId": "871c85c5-a63a-46ad-8531-e1340cfaa3dc"
+    },
+    {
+      "parameters": {
+        "table": {
+          "__rl": true,
+          "value": "mreid_data",
+          "mode": "list",
+          "cachedResultName": "mreid_data"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        320,
+        -48
+      ],
+      "id": "f9a69003-97af-450a-bd20-1b99c67cde19",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "mySql": {
+          "id": "H0HErOSQDCSXvPss",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.currencyapi.com/v3/average",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "date_from",
+              "value": "={{ $json.desde }}"
+            },
+            {
+              "name": "date_to",
+              "value": "={{ $json.hasta }}"
+            },
+            {
+              "name": "period",
+              "value": "year"
+            },
+            {
+              "name": "base_currency",
+              "value": "USD"
+            },
+            {
+              "name": "currencies",
+              "value": "EUR"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "key"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        272,
+        -352
+      ],
+      "id": "04b75726-22bd-4872-be4d-4e7b9f66b56f",
+      "name": "CurrencyAPI"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  { json: { desde: '2010-01-01', hasta: '2014-12-31' } },\n  { json: { desde: '2015-01-01', hasta: '2019-12-31' } },\n  { json: { desde: '2020-01-01', hasta: '2021-12-31' } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -352
+      ],
+      "id": "e3be3439-c07b-42f8-a0d8-0c11125771ff",
+      "name": "Prepare periods for years"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n/****************************************\n  1. OBTENER LOS TIPOS DE CAMBIO\n****************************************/\n\nconst respuestas = $(\"CurrencyAPI\").all();\n\nconst tiposCambio = {};\n\nfor (const respuesta of respuestas) {\n\n  const datos = respuesta.json.data;\n\n  for (const dato of datos) {\n\n    const anio = String(dato.period);\n\n    const cambio = Number(dato.currencies.EUR.value);\n\n    tiposCambio[anio] = cambio;\n\n  }\n}\n\n\n/****************************************\n  2. OBTENER LOS REGISTROS DEL CSV\n****************************************/\n\nconst pagos = $(\"Extract from File\").all();\n\n\n/****************************************\n  3. COLUMNAS QUE CONTIENEN USD\n****************************************/\n\nconst columnasUSD = [\n  \"OperatingrevenueTurnover\",\n  \"OperatingrevenueTurnover_green\",\n  \"OperatingrevenueTurnover_mergers\",\n  \"TotalassetsthUSD\",\n  \"TotalassetsthUSD_green\",\n  \"TotalassetsthUSD_mergers\",\n  \"FixedassetsthUSD\",\n  \"FixedassetsthUSD_green\",\n  \"FixedassetsthUSD_mergers\"\n];\n\n\n/****************************************\n  4. CONVERTIR USD A EUR\n****************************************/\n\nreturn pagos.map(item => {\n\n  const anio = String(item.json.year).trim();\n\n  const cambio = tiposCambio[anio];\n\n  // Comprobar que existe el cambio\n  if (cambio === undefined) {\n\n    throw new Error(\n      `No existe tipo de cambio para el año ${anio}`\n    );\n\n  }\n\n  // Mantener todas las columnas originales\n  const resultado = {\n    ...item.json,\n    exchange_rate: cambio\n  };\n\n  // NUEVO: Crear clave única del registro\n  resultado.record_key = [\n    item.json.iso3_o,\n    item.json.iso3_d,\n    anio,\n    item.json.naics2\n  ].join(\"_\");\n\n  // Convertir las 9 columnas monetarias\n  for (const columna of columnasUSD) {\n\n    const valor = item.json[columna];\n\n    if (valor !== null && valor !== undefined && valor !== \"\") {\n\n      const importeUSD = Number(\n        String(valor).replace(\",\", \".\")\n      );\n\n      if (!Number.isFinite(importeUSD)) {\n        throw new Error(\n          `Importe inválido en ${columna}: ${valor}`\n        );\n      }\n\n      resultado[columna + \"_eur\"] = Number(\n        (importeUSD * cambio).toFixed(2)\n      );\n\n    } else {\n\n      resultado[columna + \"_eur\"] = null;\n\n    }\n\n  }\n\n  return {\n    json: resultado\n  };\n\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -352
+      ],
+      "id": "455dbdb6-501b-4c44-8f0d-b5dfe7401549",
+      "name": "USD to EUR"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": {
+          "__rl": true,
+          "value": "stg_mreid",
+          "mode": "list",
+          "cachedResultName": "stg_mreid"
+        },
+        "dataMode": "defineBelow",
+        "columnToMatchOn": "record_key",
+        "valueToMatchOn": "={{ $json.record_key }}",
+        "valuesToSend": {
+          "values": [
+            {
+              "column": "exchange_rate",
+              "value": "={{ $json.exchange_rate}}"
+            },
+            {
+              "column": "OperatingrevenueTurnover_eur",
+              "value": "={{ $json.OperatingrevenueTurnover_eur }}"
+            },
+            {
+              "column": "OperatingrevenueTurnover_green_eur",
+              "value": "={{ $json.OperatingrevenueTurnover_green_eur }}"
+            },
+            {
+              "column": "OperatingrevenueTurnover_mergers_eur",
+              "value": "={{ $json.OperatingrevenueTurnover_mergers_eur }}"
+            },
+            {
+              "column": "TotalassetsthUSD_eur",
+              "value": "={{ $json.TotalassetsthUSD_eur }}"
+            },
+            {
+              "column": "TotalassetsthUSD_green_eur",
+              "value": "={{ $json.TotalassetsthUSD_green_eur }}"
+            },
+            {
+              "column": "TotalassetsthUSD_mergers_eur",
+              "value": "={{ $json.TotalassetsthUSD_mergers_eur }}"
+            },
+            {
+              "column": "FixedassetsthUSD",
+              "value": "={{ $json.FixedassetsthUSD_eur }}"
+            },
+            {
+              "column": "FixedassetsthUSD_green_eur",
+              "value": "={{ $json.FixedassetsthUSD_green_eur }}"
+            },
+            {
+              "column": "FixedassetsthUSD_mergers_eur",
+              "value": "={{ $json.FixedassetsthUSD_mergers_eur }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.5,
+      "position": [
+        928,
+        -336
+      ],
+      "id": "91d0269b-8166-4303-8fb5-aca8f0c31749",
+      "name": "Update rows in a table",
+      "credentials": {
+        "mySql": {
+          "id": "H0HErOSQDCSXvPss",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "batchSize": 2000,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        704,
+        -352
+      ],
+      "id": "1e59e7e3-f336-4d56-a7fe-9c8776bf00bc",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        -448
+      ],
+      "id": "2c82105d-5a1c-4535-9e14-e5ce8e0f40ff",
+      "name": "Wait1",
+      "webhookId": "608f175f-9469-4a1e-9028-324e86e7fe7b"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare periods for years",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        []
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare periods for years": {
+      "main": [
+        [
+          {
+            "node": "CurrencyAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CurrencyAPI": {
+      "main": [
+        [
+          {
+            "node": "USD to EUR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USD to EUR": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f076d39c-71f3-467d-a47a-ec2ac8dea2b4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac876e34406a454d77a7d90bbc9af52a31477eb4e91c9aab6dfd5a57174e567c"
+  },
+  "nodeGroups": [],
+  "id": "R4eqdtHWQPeZpB70",
+  "tags": []
+}
