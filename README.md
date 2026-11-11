@@ -54,6 +54,8 @@ The main findings of this project include:
 - Comparison between domestic and international activity.
 - Analysis of trends and changes over time.
 
+*Specific numerical findings and conclusions are documented based on the SQL analysis and Power BI dashboards.*
+
 ---
 
 ## Repository Structure
@@ -110,10 +112,3 @@ This project demonstrates practical skills in:
 - SQL querying and data analysis.
 - Business intelligence and visualization with Power BI.
 - Data interpretation and communication of business insights.
-
-The project showcases an end-to-end Data Analytics workflow, transforming raw data into structured information to support data-driven decision-making.
-
-
-This project demonstrates practical skills in data extraction, ETL automation, relational database management, SQL analysis, and business intelligence visualization.
-
-It represents an end-to-end Data Analytics project developed to transform raw data into structured information and actionable insights.
